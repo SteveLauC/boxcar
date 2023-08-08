@@ -12,7 +12,7 @@ fn simple() {
         assert_eq!(vec[i], i);
     }
 
-    for (i, &x) in vec.iter() {
+    for (i, _, &x) in vec.iter() {
         assert_eq!(i, x);
     }
 
@@ -66,7 +66,7 @@ fn stress() {
 
         s.spawn(|| {
             barrier.wait();
-            for (i, &x) in vec.iter() {
+            for (i,_,  &x) in vec.iter() {
                 assert!(x < 4000);
                 assert!(vec[i] < 4000);
             }

@@ -21,6 +21,7 @@ pub struct Vec<T> {
 }
 
 unsafe impl<T: Send> Send for Vec<T> {}
+
 unsafe impl<T: Sync> Sync for Vec<T> {}
 
 impl<T> Vec<T> {
@@ -51,10 +52,7 @@ impl<T> Vec<T> {
         self.count.load(Ordering::Acquire)
     }
 
-    // Returns a reference to the element at the given index.
-    pub fn get(&self, index: usize) -> Option<&T> {
-        let location = Location::of(index);
-
+    pub fn get_by_location(&self, location: &Location) -> Option<&T> {
         // safety: `location.bucket` is always in bounds
         let entries = unsafe {
             self.buckets
@@ -73,11 +71,17 @@ impl<T> Vec<T> {
 
         if entry.active.load(Ordering::Acquire) {
             // safety: the entry is active
-            unsafe { return Some(entry.value_unchecked()) }
+            unsafe { return Some(entry.value_unchecked()); }
         }
 
         // entry is uninitialized
         None
+    }
+
+    // Returns a reference to the element at the given index.
+    pub fn get(&self, index: usize) -> Option<&T> {
+        let location = Location::of(index);
+        self.get_by_location(&location)
     }
 
     // Returns a reference to the element at the given index.
@@ -123,7 +127,7 @@ impl<T> Vec<T> {
 
         if *entry.active.get_mut() {
             // safety: the entry is active
-            unsafe { return Some(entry.value_unchecked_mut()) }
+            unsafe { return Some(entry.value_unchecked_mut()); }
         }
 
         // entry is uninitialized
@@ -294,7 +298,7 @@ pub struct Iter {
 }
 
 impl Iter {
-    fn next<'v, T>(&mut self, vec: &'v Vec<T>) -> Option<(usize, &'v Entry<T>)> {
+    fn next<'v, T>(&mut self, vec: &'v Vec<T>) -> Option<(usize, Location, &'v Entry<T>)> {
         if self.yielded() == vec.count() {
             return None;
         }
@@ -321,6 +325,7 @@ impl Iter {
                     // safety: bounds checked above
                     let entry = unsafe { &*entries.add(self.location.entry) };
                     let index = self.index;
+                    let location = self.location;
 
                     self.location.entry += 1;
                     self.index += 1;
@@ -329,7 +334,7 @@ impl Iter {
                     // uninitialized one for the same reason as uninitialized buckets
                     if entry.active.load(Ordering::Acquire) {
                         self.yielded += 1;
-                        return Some((index, entry));
+                        return Some((index, location, entry));
                     }
                 }
             }
@@ -345,13 +350,13 @@ impl Iter {
         None
     }
 
-    pub fn next_shared<'v, T>(&mut self, vec: &'v Vec<T>) -> Option<(usize, &'v T)> {
+    pub fn next_shared<'v, T>(&mut self, vec: &'v Vec<T>) -> Option<(usize, Location, &'v T)> {
         self.next(vec)
-            .map(|(index, entry)| (index, unsafe { entry.value_unchecked() }))
+            .map(|(index, location, entry)| (index, location, unsafe { entry.value_unchecked() }))
     }
 
     pub unsafe fn next_owned<T>(&mut self, vec: &mut Vec<T>) -> Option<T> {
-        self.next(vec).map(|(_, entry)| unsafe {
+        self.next(vec).map(|(_, _, entry)| unsafe {
             entry.active.store(false, Ordering::Relaxed);
             // safety: `next` only yields initialized entries
             let value = mem::replace(&mut *entry.slot.get(), MaybeUninit::uninit());
@@ -422,8 +427,9 @@ impl<T> Drop for Entry<T> {
     }
 }
 
-#[derive(Debug)]
-struct Location {
+/// Physical location of an item within `Vec`.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Location {
     // the index of the bucket
     bucket: usize,
     // the length of `bucket`

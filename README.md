@@ -1,3 +1,8 @@
+# A fork of `boxcar` that:
+1. Exposes `Location` (can be created from `Iter.next()`)
+2. Adds method `get_by_location()`
+ 
+-----
 # `boxcar`
 
 [![Crate](https://img.shields.io/crates/v/boxcar?style=for-the-badge)](https://crates.io/crates/boxcar)
@@ -43,7 +48,7 @@ fn main() {
     }
 
     for i in 0..6 {
-        assert!(vec.iter().any(|(_, &x)| x == i));
+        assert!(vec.iter().any(|(_, _, &x)| x == i));
     }
 }
 ```

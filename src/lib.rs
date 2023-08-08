@@ -182,6 +182,11 @@ impl<T> Vec<T> {
         self.raw.get(index)
     }
 
+    /// Returns a reference to the element at the given location.
+    pub fn get_by_location(&self, location: &Location) -> Option<&T> {
+        self.raw.get_by_location(location)
+    }
+
     /// Returns a mutable reference to the element at the given index.
     ///
     /// # Examples
@@ -256,9 +261,11 @@ impl<T> Vec<T> {
     /// let vec = boxcar::vec![1, 2, 4];
     /// let mut iterator = vec.iter();
     ///
-    /// assert_eq!(iterator.next(), Some((0, &1)));
-    /// assert_eq!(iterator.next(), Some((1, &2)));
-    /// assert_eq!(iterator.next(), Some((2, &4)));
+    /// for i in (0..=2) {
+    ///     let next = iterator.next().unwrap();
+    ///     assert_eq!(next.0, i);
+    ///     assert_eq!(*next.2, 2_i32.pow(i as _));
+    /// }
     /// assert_eq!(iterator.next(), None);
     /// ```
     pub fn iter(&self) -> Iter<'_, T> {
@@ -290,7 +297,7 @@ impl<T> IntoIterator for Vec<T> {
 }
 
 impl<'a, T> IntoIterator for &'a Vec<T> {
-    type Item = (usize, &'a T);
+    type Item = (usize, Location, &'a T);
     type IntoIter = Iter<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -328,7 +335,7 @@ pub struct Iter<'a, T> {
 }
 
 impl<'a, T> Iterator for Iter<'a, T> {
-    type Item = (usize, &'a T);
+    type Item = (usize, Location, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.raw.next_shared(self.vec)
@@ -340,7 +347,7 @@ impl<'a, T> Iterator for Iter<'a, T> {
 }
 
 impl<T> FromIterator<T> for Vec<T> {
-    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+    fn from_iter<I: IntoIterator<Item=T>>(iter: I) -> Self {
         let iter = iter.into_iter();
 
         let (lower, _) = iter.size_hint();
@@ -355,7 +362,7 @@ impl<T> FromIterator<T> for Vec<T> {
 }
 
 impl<T> Extend<T> for Vec<T> {
-    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+    fn extend<I: IntoIterator<Item=T>>(&mut self, iter: I) {
         let iter = iter.into_iter();
 
         let (lower, _) = iter.size_hint();
@@ -369,7 +376,7 @@ impl<T> Extend<T> for Vec<T> {
 
 impl<T: Clone> Clone for Vec<T> {
     fn clone(&self) -> Vec<T> {
-        self.iter().map(|(_, x)| x).cloned().collect()
+        self.iter().map(|(_, _, x)| x).cloned().collect()
     }
 }
 
@@ -386,7 +393,7 @@ impl<T: PartialEq> PartialEq for Vec<T> {
         }
 
         // ensure indexes are checked along with values to handle gaps in the vector
-        for (index, value) in self.iter() {
+        for (index,_, value) in self.iter() {
             if other.get(index) != Some(value) {
                 return false;
             }
@@ -397,9 +404,9 @@ impl<T: PartialEq> PartialEq for Vec<T> {
 }
 
 impl<A, T> PartialEq<A> for Vec<T>
-where
-    A: AsRef<[T]>,
-    T: PartialEq,
+    where
+        A: AsRef<[T]>,
+        T: PartialEq,
 {
     fn eq(&self, other: &A) -> bool {
         let other = other.as_ref();
@@ -409,7 +416,7 @@ where
         }
 
         // ensure indexes are checked along with values to handle gaps in the vector
-        for (index, value) in self.iter() {
+        for (index,_, value) in self.iter() {
             if other.get(index) != Some(value) {
                 return false;
             }
@@ -420,3 +427,5 @@ where
 }
 
 impl<T: Eq> Eq for Vec<T> {}
+
+pub use raw::Location;
